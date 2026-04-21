@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>CC Device Demo</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body {
+  background: #0a0a0a; width: 100%; height: 100%;
+  overflow: hidden; font-family: 'Georgia', serif;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+#cc-wrapper {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 12px 0;
+}
+#cc-display {
+  position: relative; background: #0a0a0a; overflow: hidden;
+  width: min(100vw, calc((100vh - 110px) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  border: 1px solid #161616;
+  transition: border-color 0.3s ease;
+}
+#cc-display.audio-only-mode { border-color: #0a0a0a; }
+
+/* 3スロット固定帯 */
+#cc-band {
+  position: absolute;
+  left: 8%; right: 8%;
+  top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column;
+  transition: opacity 0.4s ease;
+}
+#cc-band.hidden { opacity: 0; pointer-events: none; }
+
+.slot { display: flex; flex-direction: column; flex-shrink: 0; }
+.slot-ruby { position: relative; flex-shrink: 0; }
+.slot-text {
+  font-family: 'Georgia', serif; color: #e8e4dc;
+  line-height: 1; display: block; position: relative;
+  white-space: nowrap; overflow: visible;
+}
+.slot-gap { flex-shrink: 0; }
+
+/* 輝度：older=35%、prev=55%、curr=100% */
+.slot.older .slot-text { opacity: 0.35; transition: opacity 0.6s ease; }
+.slot.prev  .slot-text { opacity: 0.55; transition: opacity 0.6s ease; }
+.slot.curr  .slot-text { opacity: 1;    transition: opacity 0.2s ease; }
+
+.word { display: inline; border-radius: 2px; padding: 0; opacity: 0; transition: opacity 0.15s ease; }
+.word.visible { opacity: 1; }
+.word.highlight { border-radius: 2px; padding: 0.1em 4px; margin: 0 1px; }
+
+.ruby-annot {
+  position: absolute; white-space: nowrap;
+  font-family: -apple-system,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
+  letter-spacing: 0.05em; pointer-events: none; line-height: 1;
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.ruby-annot.visible { opacity: 1; }
+
+#audio-indicator {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 6px;
+  opacity: 0; transition: opacity 0.4s ease; pointer-events: none;
+}
+#audio-indicator.visible { opacity: 1; }
+.bar { width: 4px; border-radius: 2px; background: #2a2a2a; }
+.bar.playing { background: #3a3a3a; animation: wave 0.8s ease-in-out infinite; }
+.bar:nth-child(2) { animation-delay: 0.1s; }
+.bar:nth-child(3) { animation-delay: 0.2s; }
+.bar:nth-child(4) { animation-delay: 0.3s; }
+.bar:nth-child(5) { animation-delay: 0.15s; }
+@keyframes wave { 0%,100%{transform:scaleY(1)}50%{transform:scaleY(3)} }
+
+#cc-brand {
+  position: absolute; bottom: 5%; right: 8%;
+  font-size: clamp(8px,1vw,11px); letter-spacing: 0.25em; color: #1c1c1c;
+  text-transform: uppercase; font-family: 'Courier New', monospace; user-select: none;
+}
+
+#cc-controls {
+  flex-shrink: 0;
+  width: min(100vw, calc((100vh - 110px) * 16 / 9));
+  padding: 8px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 6px;
+}
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  #cc-controls { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+}
+.ctrl-group { display: flex; align-items: center; gap: 7px; }
+.ctrl-label { font-size: 10px; color: #2e2e2e; font-family: 'Courier New', monospace; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+input[type=range] { width: 68px; accent-color: #555; cursor: pointer; height: 20px; }
+.ctrl-val { font-size: 10px; color: #444; font-family: 'Courier New', monospace; min-width: 28px; }
+#color-picker { display: flex; gap: 6px; align-items: center; }
+.color-swatch { width: 18px; height: 18px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: border-color 0.2s, transform 0.15s; flex-shrink: 0; }
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.active { border-color: #666; }
+#mode-toggle { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+.mode-btn {
+  background: transparent; border: 1px solid #222; color: #3a3a3a;
+  font-size: 11px; font-family: 'Courier New', monospace;
+  letter-spacing: 0.1em; padding: 8px 18px;
+  cursor: pointer; border-radius: 4px; text-transform: uppercase;
+  -webkit-appearance: none; transition: background 0.2s, border-color 0.2s, color 0.2s; white-space: nowrap;
+}
+.mode-btn.active { background: #1a1a1a; border-color: #444; color: #888; }
+.mode-btn:hover { border-color: #555; color: #777; }
+#play-btn {
+  background: transparent; border: 1px solid #1e1e1e; color: #3a3a3a;
+  font-size: 10px; font-family: 'Courier New', monospace;
+  letter-spacing: 0.12em; padding: 6px 14px; cursor: pointer;
+  border-radius: 3px; text-transform: uppercase; -webkit-appearance: none;
+  transition: border-color 0.2s, color 0.2s;
+}
+#play-btn:hover { border-color: #555; color: #777; }
+#tap-overlay {
+  position: fixed; inset: 0; background: #0a0a0a;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; cursor: pointer; transition: opacity 0.6s ease;
+}
+#tap-overlay.hidden { opacity: 0; pointer-events: none; }
+#tap-msg { font-size: 12px; letter-spacing: 0.22em; color: #2a2a2a; text-transform: uppercase; font-family: 'Courier New', monospace; }
+</style>
+</head>
+<body>
+<div id="tap-overlay"><span id="tap-msg">tap to begin</span></div>
+
+<div id="cc-wrapper">
+  <div id="cc-display">
+    <div id="cc-band">
+      <!-- older（一番古い行） -->
+      <div class="slot older" id="slot-older">
+        <div class="slot-ruby" id="ruby-older"></div>
+        <div class="slot-text" id="text-older"></div>
+      </div>
+      <div class="slot-gap" id="gap-1"></div>
+      <!-- prev -->
+      <div class="slot prev" id="slot-prev">
+        <div class="slot-ruby" id="ruby-prev"></div>
+        <div class="slot-text" id="text-prev"></div>
+      </div>
+      <div class="slot-gap" id="gap-2"></div>
+      <!-- curr -->
+      <div class="slot curr" id="slot-curr">
+        <div class="slot-ruby" id="ruby-curr"></div>
+        <div class="slot-text" id="text-curr"></div>
+      </div>
+    </div>
+    <div id="audio-indicator">
+      <div class="bar" style="height:20px;"></div>
+      <div class="bar" style="height:28px;"></div>
+      <div class="bar" style="height:36px;"></div>
+      <div class="bar" style="height:28px;"></div>
+      <div class="bar" style="height:20px;"></div>
+    </div>
+    <div id="cc-brand">Transcribes · Translates · Forgets</div>
+  </div>
+  <div id="cc-controls">
+    <div class="ctrl-group">
+      <span class="ctrl-label">文字</span>
+      <input type="range" id="size-slider" min="16" max="56" value="34" step="2">
+      <span class="ctrl-val" id="size-val">34px</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">ルビ</span>
+      <input type="range" id="ruby-slider" min="8" max="24" value="24" step="1">
+      <span class="ctrl-val" id="ruby-val">24px</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">色</span>
+      <div id="color-picker">
+        <div class="color-swatch active" data-name="yellow" style="background:#f5e642;"></div>
+        <div class="color-swatch" data-name="teal"   style="background:#38c4c4;"></div>
+        <div class="color-swatch" data-name="green"  style="background:#4ecf82;"></div>
+        <div class="color-swatch" data-name="white"  style="background:#c8c4bc;"></div>
+      </div>
+    </div>
+    <div id="mode-toggle">
+      <button class="mode-btn active" id="btn-caption">字幕あり</button>
+      <button class="mode-btn" id="btn-audio">音声のみ</button>
+      <button class="mode-btn" id="btn-fast">fast</button>
+    </div>
+    <button id="play-btn">■ stop</button>
+  </div>
+</div>
+
+<script>
+const COLORS = {
+  yellow: { hl:'#f5e642', hlBg:'rgba(245,230,66,0.10)', ruby:'#a89830' },
+  teal:   { hl:'#38c4c4', hlBg:'rgba(56,196,196,0.10)', ruby:'#1e8888' },
+  green:  { hl:'#4ecf82', hlBg:'rgba(78,207,130,0.10)', ruby:'#2e9060' },
+  white:  { hl:'#d8d4cc', hlBg:'rgba(216,212,204,0.08)', ruby:'#888070' },
+};
+let currentColor = 'yellow';
+let fontSize = 34;
+let rubySize = 24;
+let audioOnlyMode = false;
+let fastMode = false;
+
+let currentLine = 0;
+let isPlaying = true;
+let lineTimer = null;
+let currentAudio = null;
+
+const band      = document.getElementById('cc-band');
+const textOlder = document.getElementById('text-older');
+const textPrev  = document.getElementById('text-prev');
+const textCurr  = document.getElementById('text-curr');
+const rubyOlder = document.getElementById('ruby-older');
+const rubyPrev  = document.getElementById('ruby-prev');
+const rubyCurr  = document.getElementById('ruby-curr');
+const indicator = document.getElementById('audio-indicator');
+const display   = document.getElementById('cc-display');
+
+function abbrRubyH()  { return rubySize * 2 + 8; }
+function singleRubyH(){ return rubySize + 6; }
+function rubySlotH(annots) {
+  return (annots && annots.some(a => a.type === 'abbr')) ? abbrRubyH() + 6 : singleRubyH() + 6;
+}
+function applySlotSizes(annots) {
+  const rh = rubySlotH(annots);
+  document.getElementById('ruby-older').style.height = rh + 'px';
+  document.getElementById('ruby-prev').style.height  = rh + 'px';
+  document.getElementById('ruby-curr').style.height  = rh + 'px';
+  [textOlder, textPrev, textCurr].forEach(el => el.style.fontSize = fontSize + 'px');
+  const gap = Math.round(fontSize * 0.55) + 'px';
+  document.getElementById('gap-1').style.height = gap;
+  document.getElementById('gap-2').style.height = gap;
+}
+
+function placeRuby(textEl, rubyEl, wordSpans, annot) {
+  const textRect = textEl.getBoundingClientRect();
+  const spans = annot.indices.map(i => wordSpans[i]).filter(Boolean);
+  if (!spans.length) return;
+  const first = spans[0].getBoundingClientRect();
+  const last  = spans[spans.length-1].getBoundingClientRect();
+  const center = ((first.left + last.right) / 2) - textRect.left;
+  const c = COLORS[currentColor];
+
+  if (annot.type === 'abbr') {
+    const container = document.createElement('div');
+    container.style.cssText = `position:absolute;bottom:4px;display:flex;flex-direction:column;align-items:center;gap:3px;`;
+    const jaEl = document.createElement('span');
+    jaEl.style.cssText = `font-family:-apple-system,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:${rubySize}px;color:${c.ruby};white-space:nowrap;line-height:1;letter-spacing:0.05em;`;
+    jaEl.textContent = annot.ja;
+    const enEl = document.createElement('span');
+    enEl.style.cssText = `font-family:-apple-system,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:${rubySize}px;color:${c.ruby};white-space:nowrap;line-height:1;letter-spacing:0.04em;`;
+    enEl.textContent = annot.en;
+    container.appendChild(jaEl);
+    container.appendChild(enEl);
+    rubyEl.appendChild(container);
+    requestAnimationFrame(() => {
+      const w = container.offsetWidth;
+      container.style.left = Math.max(4, Math.min(center - w/2, textRect.width - w - 4)) + 'px';
+    });
+  } else {
+    const ann = document.createElement('span');
+    ann.className = 'ruby-annot';
+    ann.style.cssText = `bottom:4px;font-size:${rubySize}px;color:${COLORS[currentColor].ruby};`;
+    ann.textContent = annot.ja;
+    rubyEl.appendChild(ann);
+    requestAnimationFrame(() => {
+      const w = ann.offsetWidth;
+      ann.style.left = Math.max(4, Math.min(center - w/2, textRect.width - w - 4)) + 'px';
+      ann.classList.add('visible');
+    });
+  }
+}
+
+const SCRIPT = [
+  { audio:'audio/01.mp3', dur:1.52, en:["So"," let's"," kick"," off"," today's"," sync."], highlights:[], annots:[] },
+  { audio:'audio/02.mp3', dur:1.91, en:["The"," Q3"," pipeline"," is"," looking"," solid,"], highlights:[], annots:[] },
+  { audio:'audio/03.mp3', dur:1.67, en:["but"," we"," need"," to"," address"," some"," headwinds."], highlights:[6], annots:[{type:'single', ja:"逆風・障壁", trigger:6, indices:[6]}] },
+  { audio:'audio/04.mp3', dur:1.93, en:["Our"," go-to-market"," strategy"," needs"," a"," refresh."], highlights:[1], annots:[{type:'single', ja:"市場投入戦略", trigger:1, indices:[1]}] },
+  { audio:'audio/05.mp3', dur:1.85, en:["We're"," seeing"," a"," lot"," of"," churn"," in"," the"," mid-market."], highlights:[5], annots:[{type:'single', ja:"顧客離脱率", trigger:5, indices:[5]}] },
+  { audio:'audio/06.mp3', dur:1.49, en:["I'd"," like"," to"," table"," that"," discussion."], highlights:[3], annots:[{type:'single', ja:"保留する", trigger:3, indices:[3]}] },
+  { audio:'audio/07.mp3', dur:2.32, en:["Let's"," circle"," back"," after"," we"," align"," on"," bandwidth."], highlights:[1,2,7], annots:[{type:'single', ja:"後で再確認", trigger:2, indices:[1,2]},{type:'single', ja:"余力・リソース", trigger:7, indices:[7]}] },
+  { audio:'audio/08.mp3', dur:1.85, en:["We"," should"," socialize"," this"," with"," leadership."], highlights:[2], annots:[{type:'single', ja:"共有・根回しする", trigger:2, indices:[2]}] },
+  { audio:'audio/09.mp3', dur:2.35, en:["The"," north"," star"," metric"," for"," this"," quarter"," is"," NRR."], highlights:[1,2,3,8], annots:[{type:'single', ja:"最重要指標", trigger:3, indices:[1,2,3]},{type:'abbr', ja:"純収益維持率", en:"Net Revenue Retention", trigger:8, indices:[8]}] },
+  { audio:'audio/10.mp3', dur:2.46, en:["Let's"," make"," sure"," we're"," all"," rowing"," in"," the"," same"," direction."], highlights:[5,6,7,8,9], annots:[{type:'single', ja:"全員が同じ方向を向く", trigger:9, indices:[5,6,7,8,9]}] },
+  { audio:'audio/11.mp3', dur:2.95, en:["Our"," CAC"," has"," been"," creeping"," up,"," while"," LTV"," is"," flattening"," out."], highlights:[1,7], annots:[{type:'abbr', ja:"顧客獲得コスト", en:"Customer Acquisition Cost", trigger:1, indices:[1]},{type:'abbr', ja:"顧客生涯価値", en:"Lifetime Value", trigger:7, indices:[7]}] },
+  { audio:'audio/12.mp3', dur:2.51, en:["We"," need"," to"," improve"," onboarding"," to"," reduce"," time-to-value."], highlights:[4,7], annots:[{type:'single', ja:"初期導入プロセス", trigger:4, indices:[4]},{type:'single', ja:"価値実感までの時間", trigger:7, indices:[7]}] },
+  { audio:'audio/13.mp3', dur:2.77, en:["The"," TAM"," for"," this"," segment"," is"," larger"," than"," we"," initially"," modeled."], highlights:[1], annots:[{type:'abbr', ja:"全市場規模", en:"Total Addressable Market", trigger:1, indices:[1]}] },
+  { audio:'audio/14.mp3', dur:2.87, en:["Let's"," prioritize"," retention"," over"," acquisition"," this"," quarter."], highlights:[], annots:[] },
+  { audio:'audio/15.mp3', dur:2.17, en:["We're"," burning"," through"," runway"," faster"," than"," projected."], highlights:[3], annots:[{type:'single', ja:"資金の残り期間", trigger:3, indices:[3]}] },
+  { audio:'audio/16.mp3', dur:2.77, en:["The"," blameless"," postmortem"," flagged"," three"," critical"," failure"," points."], highlights:[1,2], annots:[{type:'single', ja:"責任追及なしの振り返り", trigger:2, indices:[1,2]}] },
+];
+
+function setAudioOnly(val) {
+  audioOnlyMode = val;
+  band.classList.toggle('hidden', val);
+  indicator.classList.toggle('visible', val);
+  display.classList.toggle('audio-only-mode', val);
+  document.getElementById('btn-caption').classList.toggle('active', !val);
+  document.getElementById('btn-audio').classList.toggle('active', val);
+}
+document.getElementById('btn-caption').addEventListener('click', () => setAudioOnly(false));
+document.getElementById('btn-audio').addEventListener('click', () => setAudioOnly(true));
+document.getElementById('btn-fast').addEventListener('click', () => {
+  fastMode = !fastMode;
+  document.getElementById('btn-fast').classList.toggle('active', fastMode);
+});
+
+document.querySelectorAll('.color-swatch').forEach(sw => {
+  sw.addEventListener('click', () => {
+    currentColor = sw.dataset.name;
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('active', s.dataset.name === currentColor));
+    const c = COLORS[currentColor];
+    document.querySelectorAll('.word.highlight').forEach(el => { el.style.color = c.hl; el.style.background = c.hlBg; });
+  });
+});
+document.getElementById('size-slider').addEventListener('input', e => {
+  fontSize = parseInt(e.target.value);
+  document.getElementById('size-val').textContent = fontSize + 'px';
+  applySlotSizes(SCRIPT[currentLine] ? SCRIPT[currentLine].annots : []);
+});
+document.getElementById('ruby-slider').addEventListener('input', e => {
+  rubySize = parseInt(e.target.value);
+  document.getElementById('ruby-val').textContent = rubySize + 'px';
+  applySlotSizes(SCRIPT[currentLine] ? SCRIPT[currentLine].annots : []);
+});
+
+function clearSlot(textEl, rubyEl) {
+  textEl.innerHTML = '';
+  rubyEl.innerHTML = '';
+}
+
+function playLine(idx) {
+  if (!isPlaying) return;
+  if (idx >= SCRIPT.length) {
+    lineTimer = setTimeout(() => {
+      currentLine = 0;
+      clearSlot(textOlder, rubyOlder);
+      clearSlot(textPrev,  rubyPrev);
+      clearSlot(textCurr,  rubyCurr);
+      if (isPlaying) playLine(0);
+    }, 2000);
+    return;
+  }
+  const data = SCRIPT[idx];
+  const c = COLORS[currentColor];
+
+  // older ← prev ← curr とシフト
+  textOlder.innerHTML = textPrev.innerHTML;
+  rubyOlder.innerHTML = rubyPrev.innerHTML;
+  textPrev.innerHTML  = textCurr.innerHTML;
+  rubyPrev.innerHTML  = rubyCurr.innerHTML;
+  clearSlot(textCurr, rubyCurr);
+  textCurr.style.fontSize = fontSize + 'px';
+  applySlotSizes(data.annots);
+
+  // 音声
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  const audio = new Audio(data.audio);
+  currentAudio = audio;
+  document.querySelectorAll('.bar').forEach(b => b.classList.add('playing'));
+  audio.play().catch(() => {});
+
+  if (!audioOnlyMode) {
+    const wordSpans = [];
+    const totalMs = (data.dur - 0.1) * 1000;
+    const interval = totalMs / data.en.length;
+
+    data.en.forEach((word, wi) => {
+      setTimeout(() => {
+        if (!isPlaying) return;
+        const isHL = data.highlights.includes(wi);
+        const ws = document.createElement('span');
+        ws.className = 'word' + (isHL ? ' highlight' : '');
+        ws.textContent = word;
+        if (isHL) { ws.style.color = c.hl; ws.style.background = c.hlBg; }
+        textCurr.appendChild(ws);
+        wordSpans[wi] = ws;
+        requestAnimationFrame(() => ws.classList.add('visible'));
+        const triggered = data.annots.find(a => a.trigger === wi);
+        if (triggered) {
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            placeRuby(textCurr, rubyCurr, wordSpans, triggered);
+          }));
+        }
+      }, wi * interval);
+    });
+  }
+
+  audio.onended = () => {
+    document.querySelectorAll('.bar').forEach(b => b.classList.remove('playing'));
+    if (!isPlaying) return;
+    currentLine++;
+    const pause = fastMode ? 300 : 800;
+    lineTimer = setTimeout(() => playLine(currentLine), pause);
+  };
+  audio.onerror = () => {
+    document.querySelectorAll('.bar').forEach(b => b.classList.remove('playing'));
+    if (!isPlaying) return;
+    currentLine++;
+    lineTimer = setTimeout(() => playLine(currentLine), 1000);
+  };
+}
+
+document.getElementById('play-btn').addEventListener('click', () => {
+  if (isPlaying) {
+    isPlaying = false;
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    clearTimeout(lineTimer);
+    document.querySelectorAll('.bar').forEach(b => b.classList.remove('playing'));
+    document.getElementById('play-btn').textContent = '▶ play';
+  } else {
+    isPlaying = true;
+    document.getElementById('play-btn').textContent = '■ stop';
+    currentLine = 0;
+    clearSlot(textOlder, rubyOlder);
+    clearSlot(textPrev,  rubyPrev);
+    clearSlot(textCurr,  rubyCurr);
+    playLine(0);
+  }
+});
+
+document.getElementById('tap-overlay').addEventListener('click', () => {
+  document.getElementById('tap-overlay').classList.add('hidden');
+  applySlotSizes([]);
+  playLine(0);
+});
+
+applySlotSizes([]);
+</script>
+</body>
+</html>
