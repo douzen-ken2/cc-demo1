@@ -11,19 +11,18 @@
 html, body {
   background: #0a0a0a; width: 100%; height: 100%;
   overflow: hidden; font-family: 'Georgia', serif;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  display: flex; flex-direction: column;
 }
 #cc-wrapper {
   width: 100%; height: 100%;
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 12px 0;
+  padding: 0;
 }
 #cc-display {
   position: relative; background: #0a0a0a; overflow: hidden;
-  width: min(100vw, calc((100vh - 110px) * 16 / 9));
-  aspect-ratio: 16 / 9;
-  border: 1px solid #161616;
+  width: 100%;
+  flex: 1;
+  border-bottom: 1px solid #161616;
   transition: border-color 0.3s ease;
 }
 #cc-display.audio-only-mode { border-color: #0a0a0a; }
@@ -43,7 +42,9 @@ html, body {
 .slot-text {
   font-family: 'Georgia', serif; color: #e8e4dc;
   line-height: 1; display: block; position: relative;
-  white-space: nowrap; overflow: visible;
+  white-space: nowrap; overflow: hidden;
+  width: 100%;
+  padding-bottom: 0.3em;
 }
 .slot-gap { flex-shrink: 0; }
 
@@ -86,9 +87,8 @@ html, body {
 
 #cc-controls {
   flex-shrink: 0;
-  width: min(100vw, calc((100vh - 110px) * 16 / 9));
+  width: 100%;
   padding: 8px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  margin-top: 6px;
 }
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   #cc-controls { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
@@ -326,6 +326,18 @@ document.getElementById('ruby-slider').addEventListener('input', e => {
   applySlotSizes(SCRIPT[currentLine] ? SCRIPT[currentLine].annots : []);
 });
 
+// 画面幅に合わせてフォントサイズを自動調整
+function fitFontSize(textEl) {
+  if (!textEl.textContent.trim()) return;
+  const bandWidth = document.getElementById('cc-band').offsetWidth;
+  let fs = fontSize;
+  textEl.style.fontSize = fs + 'px';
+  while (textEl.scrollWidth > bandWidth && fs > 10) {
+    fs -= 1;
+    textEl.style.fontSize = fs + 'px';
+  }
+}
+
 function clearSlot(textEl, rubyEl) {
   textEl.innerHTML = '';
   rubyEl.innerHTML = '';
@@ -383,6 +395,10 @@ function playLine(idx) {
           requestAnimationFrame(() => requestAnimationFrame(() => {
             placeRuby(textCurr, rubyCurr, wordSpans, triggered);
           }));
+        }
+        // 最後の単語が出たら幅チェック
+        if (wi === data.en.length - 1) {
+          requestAnimationFrame(() => fitFontSize(textCurr));
         }
       }, wi * interval);
     });
